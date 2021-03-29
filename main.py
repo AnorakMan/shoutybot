@@ -8,14 +8,26 @@ import aiohttp
 from aiohttp import web
 from threading import Thread
 from discord.utils import get
+import os
+import random
 
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.members = True
 
+SOUNDS = 'trim'
 
 debug = 1
-TOKEN = os.getenv('TOKEN')
+TOKEN = open("credentials.env","r").readline()
+
+clientList = []
+
+soundList = []
+soundList = os.listdir(SOUNDS)
+
+print('noise list = ', soundList)
+
+soundMap = {}
 
 client = commands.Bot(command_prefix='$derp', intents=intents)
 #824575380006502400 robot wars
@@ -25,14 +37,45 @@ async def hello(request):
     #for channel in channels:
     #    print(channel.name+"= ",  channel.id)
     #
+    sessionId = request.rel_url.query['id']
+    typedName = request.rel_url.query['name']
+    print('param='+sessionId)
+    if (sessionId not in clientList):
+        clientList.append(sessionId)
+        index = random.randint(0, len(soundList)-1)
+        playfile = SOUNDS+"/"+soundList[index]        
+        soundMap.update({sessionId:playfile})
+        soundList.pop(index)
+
+    playfile=soundMap.get(sessionId)
+
+    #print('soundMap=',soundMap)
+    
+    print(sessionId+' = ' + playfile)
+    #print('session list = ', clientList)
+    
+    print(' unused noises:',len(soundList))
+
+
+
+
+    #check if already connected to voice channel
     
     await channel.connect()
     voice = get(client.voice_clients)
-    voice.play(discord.FFmpegPCMAudio("/home/iain/git/shoutybot/shout.mp3"))
-    return web.Response(text="Hello, world")
+    #voice.play(discord.FFmpegPCMAudio("/home/iain/git/shoutybot/shout.mp3"))
+    voice.play(discord.FFmpegPCMAudio(playfile))
+    while voice.is_playing():
+        print('playing')
+        await asyncio.sleep(1)
+    await voice.disconnect()
+    print('done playing, disconnected voice')
+    return web.Response(text=playfile)
 
 app = web.Application()
+
 app.add_routes([web.get('/', hello)])
+
 channels = client.get_all_channels()
 @client.event
 async def on_ready():
@@ -40,21 +83,22 @@ async def on_ready():
     #channels = client.get_all_channels()
     #for channel in channels:
     #    print (channel.name+" " ,channel.id)
-    
-@client.event
-async def on_voice_state_update(member, before, after):
-    if debug == 1:
-        if member.name != 'shoutybot' and isinstance(after, discord.VoiceState):
-            print(member.name + ' either joined or left')
-            if isinstance(after.channel, discord.VoiceChannel) and after.channel.id == 824575380006502400: 
-                #need to add check if bot is already in this channel                 
-                await client.get_channel(824575380006502400).connect()     
-                voice = get(client.voice_clients)
-                voice.play(discord.FFmpegPCMAudio("/home/iain/git/shoutybot/shout.mp3"), after=print('done'))
-                while voice.is_playing():
-                    print('playing')
-                    await asyncio.sleep(1)
-                await voice.disconnect()
+
+
+#@client.event
+#async def on_voice_state_update(member, before, after):
+#    if debug == 1:
+#        if member.name != 'shoutybot' and isinstance(after, discord.VoiceState):
+#            print(member.name + ' either joined or left')
+#            if isinstance(after.channel, discord.VoiceChannel) and after.channel.id == 824575380006502400: 
+#                #need to add check if bot is already in this channel                 
+#                await client.get_channel(824575380006502400).connect()     
+#                voice = get(client.voice_clients)
+#                voice.play(discord.FFmpegPCMAudio("/home/iain/git/shoutybot/shout.mp3"), after=print('done'))
+#                while voice.is_playing():
+#                    print('playing')
+#                    await asyncio.sleep(1)
+#                await voice.disconnect()
 
     
     
@@ -83,6 +127,7 @@ loop = asyncio.get_event_loop()
 loop.create_task(client.start(TOKEN))
 Thread(target=loop.run_forever)
 web.run_app(app)
+
 
 
 

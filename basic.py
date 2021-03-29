@@ -13,7 +13,7 @@ intents = discord.Intents.default()
 intents.voice_states = True
 intents.members = True
 
-TOKEN = os.getenv('TOKEN')
+TOKEN = open("credentials.env","r").readline()
 debug = 1
 
 
@@ -50,12 +50,14 @@ async def on_voice_state_update(member, before, after):
                 #need to add check if bot is already in this channel                 
                 await client.get_channel(824575380006502400).connect()     
                 voice = get(client.voice_clients)
-                voice.play(discord.FFmpegPCMAudio("/home/iain/git/shoutybot/shout.mp3"), after=print('done'))
+                voice.play(discord.FFmpegPCMAudio("/home/iain/git/shoutybot/shout.mp3"), after=print('started playing'))
+                secs=0
                 while voice.is_playing():
-                    print('playing')
+                    secs=secs+1
+                    print('playing ', secs)
                     await asyncio.sleep(1)
                 await voice.disconnect()
-
+                print('done playing, disconnected voice')
     
     
             
