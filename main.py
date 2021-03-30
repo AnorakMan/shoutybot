@@ -10,72 +10,75 @@ from threading import Thread
 from discord.utils import get
 import os
 import random
+from gtts import gTTS
+import string
 
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.members = True
 
 SOUNDS = 'trim'
+MODE = 'fry'
+debug = 0
 
-debug = 1
 TOKEN = open("credentials.env","r").readline()
 
 clientList = []
-
-soundList = []
 soundList = os.listdir(SOUNDS)
 
 print('noise list = ', soundList)
 
+prefix = '$shout '
+
+modes = ['fry','paxman']
+
 soundMap = {}
 
-client = commands.Bot(command_prefix='$derp', intents=intents)
+client = commands.Bot(command_prefix=prefix, intents=intents)
 #824575380006502400 robot wars
-async def hello(request):
-    #channel = client.get_channel(824575380006502400)
-    #channels = client.get_all_channels()
-    #for channel in channels:
-    #    print(channel.name+"= ",  channel.id)
-    #
+async def hello(request):    
     sessionId = request.rel_url.query['id']
-    #typedName = request.rel_url.query['name']
-    #TODO: Add the typed name as a parameter, check for null values
-    print('param='+sessionId)
+    typedName = request.rel_url.query['name']
+    #Anti-Mikey feature
+    typedName = typedName.translate(str.maketrans('', '', string.punctuation))
+    #another anti-Mikey feature
+    if (len(typedName) > 30):
+        typedName=typedName[0:30]
+    
+    
     if (sessionId not in clientList):
         clientList.append(sessionId)
+        #get random sound from list
         index = random.randint(0, len(soundList)-1)
         playfile = SOUNDS+"/"+soundList[index]        
         soundMap.update({sessionId:playfile})
         soundList.pop(index)
 
-    playfile=soundMap.get(sessionId)
-
-    #print('soundMap=',soundMap)
-    
-    print(sessionId+' = ' + playfile)
-    #print('session list = ', clientList)
-    
+    playfile=soundMap.get(sessionId)    
+    print(sessionId+' = '+ 'is pretending to be \'' + typedName+'\' is getting file ' + playfile)    
     print(' unused noises:',len(soundList))
 
-
-
-
-    #check if already connected to voice channel
-    
-    #await channel.connect()
     voice = get(client.voice_clients)
     
     if (voice is not None):
         #TODO: mute all other users in voice channel
-        voice.play(discord.FFmpegPCMAudio(playfile))
+        print(' MODE:'+MODE)
+        if (MODE == 'paxman'):
+            tts = gTTS(typedName)
+           
+            tts.save(typedName)
+            
+            voice.play(discord.FFmpegPCMAudio(typedName))
+        else:
+            voice.play(discord.FFmpegPCMAudio(playfile))                          
+       
         while voice.is_playing():
             print('playing')
             await asyncio.sleep(1)
-        #await voice.disconnect()
-        #print('done playing, disconnected voice')
-        return web.Response(text=playfile)
+        return web.Response(text=playfile,status=200)
     else:
-        return web.Response(text='bot not connected to voice channel')
+        helpString = 'Bot not connected, wake it with $shout { fry, paxman}'
+        return web.Response(body=helpString,status=500)       
 
 app = web.Application()
 
@@ -84,10 +87,10 @@ app.add_routes([web.get('/', hello)])
 channels = client.get_all_channels()
 @client.event
 async def on_ready():
-    print('connected')
-    #channels = client.get_all_channels()
-    #for channel in channels:
-    #    print (channel.name+" " ,channel.id)
+    print('discord connection established, channel list=')
+    channels = client.get_all_channels()
+    for channel in channels:
+        print (channel.name+" " ,channel.id)
 
 """
 @client.event
@@ -106,16 +109,39 @@ async def on_voice_state_update(member, before, after):
                 await voice.disconnect()
 """
     
-    
+@client.event
+async def on_voice_state_update(member, before, after):
+    #what channel am I connected to?    
+    voice = get(client.voice_clients)
+    if (voice is not None):
+        channel = voice.channel
+        print('I am connected to ', channel.id)
+        print('channel has ', len(channel.members))
+        #if the channel only has 1 member, assume it's me and disconnect
+        if (len(channel.members)==1):
+            await voice.disconnect()
+
             
 @client.command(name='paxman', help='Paxman?')
 async def join_voice(ctx):
-    #print('joining voice channel I hope')
-    #channel = ctx.author.voice.channel    
-    #print('author is in voice channel = ', ctx.author.voice.channel)
-    #channels = ctx.author.voice
-    if (ctx.author.voice is not None):
+    global MODE
+    MODE = 'paxman'
+    print('MODE='+MODE)
+    if (ctx.author.voice is not None):        
         await ctx.author.voice.channel.connect()
+    else:
+        await ctx.send('You need to be in a voice channel!')
+
+
+@client.command(name='fry', help='fry?')
+async def join_voice(ctx):    
+    global MODE
+    MODE = 'fry'
+    print('MODE='+MODE)
+    if (ctx.author.voice is not None):        
+        await ctx.author.voice.channel.connect()      
+    else:
+        await ctx.send('You need to be in a voice channel!')          
 
 @client.event
 async def on_message(message):

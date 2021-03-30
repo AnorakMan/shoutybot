@@ -6,7 +6,6 @@ clientList.append('second')
 
 item2 = 'third'
 
-if (item2 not in clientList):
-    clientList.append(item2)
+output = 'test {1}',clientList.tostring()
 
-print(clientList)
+print(output)
