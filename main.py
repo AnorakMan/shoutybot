@@ -66,9 +66,9 @@ async def hello(request):
         if (MODE == 'paxman'):
             tts = gTTS(typedName)
            
-            tts.save(typedName)
+            tts.save(typedName+'.mp3')
             
-            voice.play(discord.FFmpegPCMAudio(typedName))
+            voice.play(discord.FFmpegPCMAudio(typedName+'.mp3'))
         else:
             voice.play(discord.FFmpegPCMAudio(playfile))                          
        

@@ -2,3 +2,4 @@ credentials.env
 *.env
 noise
 trim
+*.mp3
