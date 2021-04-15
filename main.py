@@ -18,23 +18,38 @@ intents = discord.Intents.default()
 intents.voice_states = True
 intents.members = True
 
-SOUNDS = 'trim'
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
+
+
+SOUNDS_DIR = 'noises'
 MODE = 'fry'
 debug = 0
+credentialsfile = 'credentials.env'
 
-TOKEN = open("credentials.env","r").readline()
+if (not os.path.isfile(credentialsfile)):
+    logging.error('could not find credentials.env in the working directory')
+    exit(1)
+
+if (not os.path.isdir(SOUNDS_DIR)):
+    logging.error('could not find \'noises\' directory')
+    exit(1)
+
+TOKEN = open(credentialsfile,'r').readline()
 #TODO: exit on token load fail
 
 if (TOKEN is None or len(TOKEN)==0):
-    print('cloud not load discord token')
+    logging.error('could not load discord token')
     exit
 
 #Set up array to store list of connected clients on the Button website
 clientList = []
 #Load array of buzz in noise sounds
-soundList = os.listdir(SOUNDS)
+soundList = os.listdir(SOUNDS_DIR)
 
-print('noise list = ', soundList)
+logging.info('noise list = %s', soundList)
 
 prefix = '$shout '
 
@@ -45,19 +60,24 @@ soundMap = {}
 mp3List = []
 
 client = commands.Bot(command_prefix=prefix, intents=intents)
-#824575380006502400 robot wars
+
+#handler for requests coming in through the async web server.
+#assumes that the url parameters 'id', 'disconnect' 'name' exist
+#example request URL https://example.com/shout?id=123&name=Iain&disconnect=false
 async def hello(request):    
     sessionId = request.rel_url.query['id']
 
+    #the Socket IO application will call with discconect=true if a client disconnects
+    #so we can clean up / release the voice file
     disconnected = request.rel_url.query['disconnect']
     if (disconnected=='true'):
-        print('received disconnection event for ' + sessionId)
+        logging.info('received disconnection event for %s', sessionId)
         if (sessionId in clientList):
             clientList.remove(sessionId)
             soundList.append(soundMap.get(sessionId))
-            print(' added ' + soundMap.get(sessionId)+' back to sound list')
+            logging.info(' added %s back to sound list',soundMap.get(sessionId))
             del soundMap[sessionId]
-            print(' unused noises:',len(soundList))
+            logging.info(' unused noises: %s',len(soundList))
             return web.Response(body='removed client from list',status=200)
     else:
         typedName = request.rel_url.query['name']
@@ -66,11 +86,13 @@ async def hello(request):
         #another anti-Mikey feature
         if (len(typedName) > 30):
             typedName=typedName[0:30]
+        #The man with no name
         if (len(typedName)==0):
             typedName='Clint Eastwood'
+        #MEMES.
         if(typedName.lower()=='acres greg'):
             typedName='CURIOUS GEORGE'
-        
+        #check if we've already selected a sound for this client
         if (sessionId not in clientList):
             clientList.append(sessionId)
             #get random sound from list
@@ -80,14 +102,15 @@ async def hello(request):
             soundList.pop(index)
 
         playfile=soundMap.get(sessionId)    
-        print(sessionId+' = '+ 'is pretending to be \'' + typedName+'\' is getting file ' + playfile)    
-        print(' unused noises:',len(soundList))
+        logging.info('%s = is pretending to be %s, is getting file %s', sessionId, typedName, playfile)
+        #logging.info(sessionId+' = '+ 'is pretending to be \'' + typedName+'\' is getting file ' + playfile)    
+        logging.info(' unused noises: %s',len(soundList))
 
         voice = get(client.voice_clients)
         
         if (voice is not None):
             #TODO: mute all other users in voice channel
-            print(' MODE:'+MODE)
+            logging.info(' MODE: %s',MODE)
             if (MODE == 'paxman'):
                 mp3FileName = typedName+'.mp3'
                 if (not os.path.isfile(mp3FileName)):
@@ -99,15 +122,15 @@ async def hello(request):
                     voice.play(discord.FFmpegPCMAudio(mp3FileName))
             else:
                 if (not voice.is_playing()):
-                    voice.play(discord.FFmpegPCMAudio(SOUNDS+"/"+playfile))                          
+                    voice.play(discord.FFmpegPCMAudio(SOUNDS_DIR+"/"+playfile))                          
             playSeconds = 0
             while voice.is_playing():
-                print('playing ', playSeconds)
+                logging.info('playing %s', playSeconds)
                 playSeconds = playSeconds+1
                 await asyncio.sleep(1)
             return web.Response(text=playfile,status=200)
         else:
-            helpString = 'Bot active, but connected to a voice channel. Type  \'$shout help\' in discord'
+            helpString = 'Bot active, but not connected to a voice channel. Type  \'$shout help\' in discord'
             return web.Response(body=helpString,status=500)       
 
 app = web.Application()
@@ -117,11 +140,11 @@ app.add_routes([web.get('/', hello)])
 channels = client.get_all_channels()
 @client.event
 async def on_ready():
-    print('discord connection established, voice channel list=')
+    logging.info('discord connection established, voice channel list=')
     channels = client.get_all_channels()
     for channel in channels:
         if (isinstance(channel, discord.VoiceChannel)):            
-            print (channel.name+" " ,channel.id)
+            logging.info ('%s %s',channel.name,channel.id)
             
     
     #TODO: reconnect to a voice channel if I'm already there
@@ -151,14 +174,14 @@ async def on_voice_state_update(member, before, after):
     voice = get(client.voice_clients)
     if (voice is not None):
         channel = voice.channel
-        print('I am connected to ', channel.id)
-        print('channel has ', len(channel.members))
+        logging.info('I am connected to %s', channel.id)
+        logging.info('channel has %s', len(channel.members))
         #if the channel only has 1 member, assume it's me and disconnect
         if (len(channel.members)==1):
             await voice.disconnect()
-            print('cleaning up temp files:')
+            logging.info('cleaning up temp files:')
             for mp3File in mp3List:
-                print('     '+mp3File)
+                logging.info('     %s',mp3File)
                 os.remove(mp3File)
 
 
@@ -167,7 +190,7 @@ async def on_voice_state_update(member, before, after):
 async def join_voice(ctx):
     global MODE
     MODE = 'paxman'
-    print('MODE='+MODE)
+    logging.info('MODE='+MODE)
     if (ctx.author.voice is not None):        
         await ctx.author.voice.channel.connect()
     else:
@@ -184,7 +207,7 @@ async def join_voice(ctx):
 async def join_voice(ctx):    
     global MODE
     MODE = 'fry'
-    print('MODE='+MODE)
+    logging.info('MODE=%s',MODE)
     if (ctx.author.voice is not None):        
         await ctx.author.voice.channel.connect()      
     else:
@@ -193,13 +216,25 @@ async def join_voice(ctx):
 @client.event
 async def on_message(message):
     chat_message = message.content.lower()
+    """ if '999' in chat_message:
+        if (message.author.voice is not None):
+            await message.author.voice.channel.connect()
+            shout = discord.File(f'../shout.mp3')
+            print('filename=',shout)
+            voice = get(client.voice_clients)
+            voice.play(discord.FFmpegPCMAudio(shout.filename) , after=print('done'))
+            while voice.is_playing():
+                print('playing')
+                await asyncio.sleep(1)
+            await voice.disconnect()"""
+
     await client.process_commands(message)
 
 
 
 
 async def start_discord(app):
-    print('start disco')
+    logging.info('start disco')
     
 
 
